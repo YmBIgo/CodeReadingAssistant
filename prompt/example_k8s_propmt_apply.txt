@@ -1,0 +1,60 @@
+```purpose
+Want to know how "kubectl apply" work.
+```
+
+```code
+func (o *ApplyOptions) Run() error {
+	if o.PreProcessorFn != nil {
+		klog.V(4).Infof("Running apply pre-processor function")
+		if err := o.PreProcessorFn(); err != nil {
+			return err
+		}
+	}
+
+	// Enforce CLI specified namespace on server request.
+	if o.EnforceNamespace {
+		o.VisitedNamespaces.Insert(o.Namespace)
+	}
+
+	// Generates the objects using the resource builder if they have not
+	// already been stored by calling "SetObjects()" in the pre-processor.
+	errs := []error{}
+	infos, err := o.GetObjects()
+	if err != nil {
+		errs = append(errs, err)
+	}
+	if len(infos) == 0 && len(errs) == 0 {
+		return fmt.Errorf("no objects passed to apply")
+	}
+
+	if o.ApplySet != nil {
+		if err := o.ApplySet.BeforeApply(infos, o.DryRunStrategy, o.ValidationDirective); err != nil {
+			return err
+		}
+	}
+
+	// Iterate through all objects, applying each one.
+	for _, info := range infos {
+		if err := o.applyOneObject(info); err != nil {
+			errs = append(errs, err)
+		}
+	}
+	// If any errors occurred during apply, then return error (or
+	// aggregate of errors).
+	if len(errs) == 1 {
+		return errs[0]
+	}
+	if len(errs) > 1 {
+		return utilerrors.NewAggregate(errs)
+	}
+
+	if o.PostProcessorFn != nil {
+		klog.V(4).Infof("Running apply post-processor function")
+		if err := o.PostProcessorFn(); err != nil {
+			return err
+		}
+	}
+
+	return nil
+}
+```
