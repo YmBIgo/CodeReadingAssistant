@@ -5,6 +5,7 @@ export type Choice = {
     functionCodeLine: string;
     originalFilePath: string;
     id: string;
+    functionCodeContent?: string;
 }
 export type ProcessChoice = {
     functionName: string;
@@ -19,6 +20,8 @@ type ChoicePosition = {
     depth: number;
     width: number;
 }
+
+const HISTORY_PREFIX = " ".repeat(2)
 
 export class HistoryHandler {
     private rootPath: string;
@@ -67,7 +70,7 @@ export class HistoryHandler {
             return
         }
     }
-    choose(selectIndex: number) {
+    choose(selectIndex: number, functionCodeContent: string) {
         const maxDepthPosition = this.currentChoicePosition.find((ccp) =>
             ccp.depth === this.currentChoicePosition.length - 1
         );
@@ -77,6 +80,22 @@ export class HistoryHandler {
             depth: maxDepth + 1,
             width: selectIndex
         }]
+        this.searchByChoicePositionArray((choiceTree) => {
+            choiceTree.content.functionCodeContent = functionCodeContent;
+        })
+    }
+    private searchByChoicePositionArray(callbackFn?: (choiceTree: ChoiceTree) => void) {
+        let currentTree = this.choiceTree;
+        let currentDepth = 0;
+        for(let choicePosition of this.currentChoicePosition) {
+            const depth = choicePosition.depth;
+            const width = choicePosition.width;
+            if (depth !== currentDepth + 1) continue;
+            currentTree = currentTree.children[width];
+            currentDepth += 1;
+        }
+        if (callbackFn) callbackFn(currentTree);
+        return currentTree;
     }
     private move(selectedChoicePosition: ChoicePosition[]) {
         this.currentChoicePosition = selectedChoicePosition
@@ -107,12 +126,45 @@ export class HistoryHandler {
         console.log(this.visualizeResult);
     }
     private printTree(tree: ChoiceTree, prefix: string = "") {
-        this.visualizeResult += `${prefix}|${tree.content.functionName.slice(0, 20)}
+        this.visualizeResult += `${prefix}|${tree.content.functionName}
 ${prefix}|${tree.content.id.slice(0, 7)}
 
 `
         for (let child of tree.children) {
-            this.printTree(child, prefix + "        ")
+            this.printTree(child, prefix + HISTORY_PREFIX)
         }
+    }
+    traceFunctionContent(): [string, string] {
+        /* desired result is following...
+            ```file_name1:function_name1
+            content1...
+            ```
+            ```file_name2:function_name2
+            content2...
+            ```
+         */
+        let result: string = "";
+        let functionResult: string = "";
+        let currentTree = this.choiceTree;
+        let currentDepth = 0;
+        for(let index in this.currentChoicePosition) {
+            const choicePosition = this.currentChoicePosition[index]
+            const depth = choicePosition.depth;
+            const width = choicePosition.width;
+            if (depth !== currentDepth) continue;
+            if (depth !== 0) currentTree = currentTree.children[width];
+            const fileName = currentTree.content.originalFilePath;
+            const functionName = currentTree.content?.functionName ?? currentTree.content.functionCodeLine;
+            const functionCode = currentTree.content.functionCodeContent || "not provided..."
+            functionResult += `${functionName} -> `
+            const currentResult = `\`\`\`${index} : ${fileName}:${functionName}
+${functionCode}
+\`\`\`
+
+`
+            result += currentResult;
+            currentDepth += 1;
+        }
+        return [result, functionResult];
     }
 }

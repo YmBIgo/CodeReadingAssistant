@@ -8,6 +8,9 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prompt } from "./prompt/index_ja";
 import { stdin as input, stdout as output } from "node:process";
 import * as readline from "node:readline/promises";
+import { getReportPrompt } from "./prompt";
+
+const saveDataFolder = "/Users/coffeecup/Desktop/sandbox/readCodeAssistant"
 
 export class ReadCodeAssistant {
     private apiHandler: AnthropicHandler;
@@ -20,7 +23,7 @@ export class ReadCodeAssistant {
         this.rootPath = rootPath;
         this.rootFunctionName = rootFunctionName;
         this.purpose = purpose;
-        this.apiHandler = new AnthropicHandler("/Users/coffeecup/Desktop/sandbox/readCodeAssistant");
+        this.apiHandler = new AnthropicHandler();
         this.historyHandler = new HistoryHandler(this.rootPath, this.rootFunctionName, this.rootFunctionName);
         console.log(`\nStarting Task...
 EntryFile @${rootPath}
@@ -85,16 +88,13 @@ ${functionContent}
         })
         const rl = readline.createInterface({input, output});
         const result = await rl.question(`Please Input Index which you want to see details
-※：enter 5 to retry. enter 6 to show history
+※：enter 5 to retry. enter 6 to show history. enter 7 to get report.
 ※：If you enter string, it is recognized as hash value to search history.
 `);
         let resultNumber = Number(result);
         rl.close();
         if (isNaN(resultNumber)) {
-            const newRunConfig = this.historyHandler.moveById(result);
-            if (!newRunConfig) return;
-            const { functionCodeLine, originalFilePath } = newRunConfig;
-            this.runInitialTask(originalFilePath, functionCodeLine)
+            this.runHistoryPoint(result);
             return;
         }
         if (resultNumber === 5) {
@@ -110,10 +110,24 @@ ${functionContent}
             rl2.close();
             resultNumber = Number(result2);
             if (isNaN(resultNumber)){
-                const newRunConfig = this.historyHandler.moveById(result2);
-                if (!newRunConfig) return;
-                const { functionCodeLine, originalFilePath } = newRunConfig;
-                this.runInitialTask(originalFilePath, functionCodeLine)
+                this.runHistoryPoint(result2)
+                return;
+            }
+            if (resultNumber === 5) {
+                this.runTask(currentPath, functionContent)
+                return
+            }
+        }
+        if (resultNumber === 7) {
+            await this.getReport();
+            const rl2 = readline.createInterface({input, output})
+            const result2 = await rl2.question(`Please Input Index which you want to see details
+※：enter 5 to retry.
+`);
+            rl2.close();
+            resultNumber = Number(result2);
+            if (isNaN(resultNumber)){
+                this.runHistoryPoint(result2)
                 return;
             }
             if (resultNumber === 5) {
@@ -123,7 +137,6 @@ ${functionContent}
         }
         if (!parsedContent[resultNumber]) return;
         this.historyHandler.addHistory(newHistoryChoices);
-        this.historyHandler.choose(resultNumber)
         const goplsHanlder = new GoplsHandler(currentPath, "/opt/homebrew/bin/gopls");
         await goplsHanlder.readFile();
         const file = await goplsHanlder.searchNextFunction(
@@ -135,7 +148,31 @@ ${functionContent}
             return
         }
         const [newFilePath, newFileContent] = file
+        this.historyHandler.choose(resultNumber, newFileContent)
         console.log(`\nSearching for @${newFilePath}\n`)
         this.runTask(newFilePath, newFileContent)
+    }
+    private runHistoryPoint(historyHash: string) {
+        const newRunConfig = this.historyHandler.moveById(historyHash);
+        if (!newRunConfig) return;
+        const { functionCodeLine, originalFilePath } = newRunConfig;
+        this.runInitialTask(originalFilePath, functionCodeLine);
+    }
+    private async getReport() {
+        const [result, functionResult] = this.historyHandler.traceFunctionContent()
+        console.log(`Generate Report related to "${functionResult}"`);
+        const userPrompt = `\`\`\`purpose
+${this.purpose}
+\`\`\`
+
+${result}`;
+        const history: Anthropic.MessageParam[] = [{role: "user", content: userPrompt}];
+        const response = await this.apiHandler.createMessage(getReportPrompt, history);
+        const type = response.content[0].type;
+        if (type !== "text") return;
+        const res = response.content[0].text + "\n\n - Details \n\n" + result;
+        const fileName = `report_${Date.now()}.txt`;
+        await fs.writeFile(`${saveDataFolder}/${fileName}`, res);
+        console.log(`Generate Report successfully @${saveDataFolder}/${fileName}`);
     }
 }
