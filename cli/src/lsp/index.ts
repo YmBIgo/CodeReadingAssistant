@@ -12,6 +12,10 @@ export async function getFunctionContentFromFile(filePath: string, startRow: num
     }
     const fileContentSplit = originalFileContent.split("\n");
     const fileContent = fileContentSplit.slice(startRow - 1);
+    const selectedFileContent = fileContentSplit.slice(startRow - 1, startRow + 3) // FIXME : 本当はやりたくないが、Claudeに少しだけ投げると変な返答が返ってくるので...
+    if (!selectedFileContent.join("\n").includes("func ") && !selectedFileContent.join("\n").includes("{")) {
+        return selectedFileContent.join("\n")
+    }
     let fileResultArray = [];
     let startArrowCount = 0;
     let endArrowCount = 0;
@@ -68,10 +72,12 @@ export class GoplsHandler {
             console.warn(`codeLine not found @${this.filePath}`)
             return null;
         }
-        const functionIndex = wholeCodeLine.indexOf(functionName);
+        let functionIndex = wholeCodeLine.indexOf(functionName);
         if (functionIndex === -1) {
-            console.warn(`functionName not fount @${codeLine}`)
-            return null;
+            console.warn(`functionName not fount @${codeLine}`);
+            const functionIndex2 = codeLine.indexOf(functionName);
+            if (functionIndex2 === -1) return null;
+            functionIndex = functionIndex2;
         }
         return [codeLineIndex + 1, functionIndex + 1]
     }
@@ -89,15 +95,34 @@ export class GoplsHandler {
         console.log(stdout)
         if (!stdout) return null;
         const stdoutFilePath = stdout.split(": defined here")[0];
-        const [filePath, fileContent] = await this.parseStdoutFilePath(stdoutFilePath);
-        return [filePath, fileContent];
+        const parsedFile = await this.parseStdoutFilePath(stdoutFilePath, codeLineIndex);
+        if (parsedFile) {
+            const [filePath, fileContent] = parsedFile
+            return [filePath, fileContent];
+        }
+        const findImplementationCommand = `cd ${path.dirname(this.filePath)}; ${this.goplsPath} implementation ${this.filePath}:${codeLineIndex}:${functionIndex}`;
+        console.log("\n\nexec command again : ", findImplementationCommand);
+        const {stdout: stdout2, stderr: stderr2} = await execa({shell: true})`${findImplementationCommand}`;
+        if (stderr) {
+            console.error(`error occurs: ${stderr2}`);
+            return null;
+        }
+        console.log(stdout2);
+        if (!stdout) return null;
+        const parsedFile2 = await this.parseStdoutFilePath(stdout2.split("\n")[0], codeLineIndex);
+        if (parsedFile2) {
+            const [filePath2, fileContent2] = parsedFile2;
+            return [filePath2, fileContent2];
+        }
+        return null;
     }
-    private async parseStdoutFilePath(filePath: string): Promise<[string, string]> {
+    private async parseStdoutFilePath(filePath: string, codeLineIndex: number): Promise<[string, string] | null> {
         const splitFilePath = filePath.split("/");
         const fileInfo = splitFilePath[splitFilePath.length - 1];
         const fileName = fileInfo.split(":")[0];
         const resultFilePath = [...splitFilePath.slice(0, splitFilePath.length - 1), fileName].join("/");
         const fileRow = Number(fileInfo.split(":")[1]);
+        if (fileRow === codeLineIndex) return null
         const fileContent = await getFunctionContentFromFile(resultFilePath, fileRow);
         return [resultFilePath, fileContent ?? ""];
     }

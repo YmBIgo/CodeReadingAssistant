@@ -9,7 +9,7 @@ export class AnthropicHandler {
     constructor(saveLlmHistoryFolder: string = "") {
         this.client = new Anthropic({apiKey: process.env["CLAUDE_API_KEY"]})
         this.attemptCount = 0
-        this.model = "claude-3-5-sonnet-20241022"
+        this.model = "claude-3-5-sonnet-20241022" // claude-3-7-sonnet-20250219 / claude-3-5-sonnet-20241022
         this.saveLlmHistoryFolder = saveLlmHistoryFolder
     }
     async createMessage(systemPrompt: string, history: Anthropic.MessageParam[]): Promise<Anthropic.Messages.Message> {

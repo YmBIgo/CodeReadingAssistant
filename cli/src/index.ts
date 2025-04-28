@@ -10,15 +10,50 @@ Kubelet
 */
 
 /*
-Schedular
+Kubernetes Schedular
 - /Users/coffeecup/Documents/open_source/kubernetes/kubernetes/pkg/scheduler/scheduler.go
 - New
 - Kubernetes の Scheduler の重要箇所を知りたい
 */
 
+/*
+Argo-CD
+- /Users/coffeecup/Documents/open_source/kubernetes/argo-cd/cmd/main.go
+- appcontroller.NewCommand
+- Argo-CDを読み始めたばかりだが、Controller について知りたい
+ */
+
+/*
+Argo-CD Controller compareAppState
+- /Users/coffeecup/Documents/open_source/kubernetes/argo-cd/controller/state.go
+- CompareAppState
+- Argo-CD の Controller が、ステートを比較している部分を知りたい
+*/
+
+/*
+Argo-CD Controller GetRepoObjs
+- /Users/coffeecup/Documents/open_source/kubernetes/argo-cd/controller/state.go
+- GetRepoObjs
+- Argo-CD の Controller が、新旧のステートを取得している部分を知りたい
+*/
+
+/*
+Argo-CD Repo reposerver.NewCommand
+- /Users/coffeecup/Documents/open_source/kubernetes/argo-cd/cmd/main.go
+- reposerver.NewCommand
+- Argo-CD の RepoServer が何をしているか知りたい
+*/
+
+/*
+Argo-CD Repo reposerver.NewCommand
+- /Users/coffeecup/Documents/open_source/kubernetes/argo-cd/cmd/main.go
+- reposerver.NewCommand
+- Argo-CD の RepoServer が gitのrepoをどう取得しているか知りたい
+*/
+
 // /Users/coffeecup/Documents/open_source/kubernetes/kubernetes/staging/src/k8s.io/kubectl/pkg/cmd/apply/apply.go
 async function readRootPath() {
-    return "/Users/coffeecup/Documents/open_source/kubernetes/kubernetes/pkg/scheduler/scheduler.go"
+    return "/Users/coffeecup/Documents/open_source/kubernetes/argo-cd/cmd/main.go"
     const rl = readline.createInterface({input, output})
     const result = await rl.question("Please input Root Path which you want to see details\n");
     rl.close();
@@ -27,7 +62,7 @@ async function readRootPath() {
 
 // func (o *ApplyOptions) Run() error {
 async function readRootFunction() {
-    return "New"
+    return "reposerver.NewCommand"
     const rl = readline.createInterface({input, output})
     const result = await rl.question("Please input Root Function Line which you want to see details\n");
     rl.close();
@@ -36,7 +71,7 @@ async function readRootFunction() {
 
 // Want to know how "kubectl apply" work.
 async function readPurpose() {
-    return "Kubernetes の Scheduler のスコアリングを知りたい"
+    return "Argo-CD の RepoServer が gitのrepoをどう取得しているか知りたい"
     const rl = readline.createInterface({input, output})
     const result = await rl.question("Please input Purpose which you want to see details\n");
     rl.close();

@@ -5,10 +5,9 @@ import { AnthropicHandler } from "./llm";
 import fs from "fs/promises"
 import { GoplsHandler, getFunctionContentFromFile } from "./lsp";
 import Anthropic from "@anthropic-ai/sdk";
-import { prompt } from "./prompt/index_ja";
+import { prompt, getReportPrompt } from "./prompt/index_ja";
 import { stdin as input, stdout as output } from "node:process";
 import * as readline from "node:readline/promises";
-import { getReportPrompt } from "./prompt";
 
 const saveDataFolder = "/Users/coffeecup/Desktop/sandbox/readCodeAssistant"
 
@@ -67,28 +66,49 @@ ${functionContent}
         if (type !== "text") return;
         let parsedContent;
         try {
-            parsedContent = JSON.parse(response.content[0].text.replace(/\t/g, ""))
+            let rawMessage = response.content[0].text.replace(/\t/g, "");
+            rawMessage = rawMessage.replace("```json", "").replace(/```^/g, "") // FIXME : 本来はつけたくないが、3.7にした瞬間必要になった...
+            parsedContent = JSON.parse(rawMessage)
         } catch (e) {
             console.error(e, response.content[0].text)
             return
         }
         if (!Array.isArray(parsedContent)) return;
-        let newHistoryChoices: ProcessChoice[] = []
+        const fileContentArray = functionContent.split("\n");
+        let newHistoryChoices: ProcessChoice[] = [];
+        let parsedContentCodeLineArray: string[] = [];
         parsedContent.forEach((pc, index) => {
+            const fileCodeLine = fileContentArray.find((fcr) => {
+                if (fcr.includes(pc.codeLine.split(")")[0])) return true
+            })
+            ?? fileContentArray.find((fcr) => {
+                const spaceRemovedRow = fcr.replace(/ /g, "").replace(/\t/g, "");
+                if (spaceRemovedRow.startsWith("//") || spaceRemovedRow.startsWith("/*")) return false
+                const isFunctionString = new RegExp(`"[\\s\\S]*${pc["function"]}[\\s\\S]*"`, "g").exec(fcr)
+                if (isFunctionString) return false
+                const isFunctionString2 = new RegExp(`'[\\s\\S]*${pc["function"]}[\\s\\S]*'`, "g").exec(fcr)
+                if (isFunctionString2) return false
+                const isFunctionString3 = new RegExp(`\`[\\s\\S]*${pc["function"]}[\\s\\S]*\``, "g").exec(fcr)
+                if (isFunctionString3) return false
+                const isFunctionNameInclude = new RegExp(`[ .\t]{1}${pc["function"]}[ (.:,]{1}`).exec(fcr);
+                return Boolean(isFunctionNameInclude);
+                // return fcr.includes(` ${pc["function"]}`) || fcr.includes(`.${pc["function"]}`);
+            }) ?? pc.codeLine;
+            parsedContentCodeLineArray.push(fileCodeLine)
             console.log(`${index} : ${pc["function"]}`);
             console.log(`Details : ${pc.explain}`);
-            console.log(`Whole CodeLine : ${pc.codeLine}`);
+            console.log(`Whole CodeLine : ${fileCodeLine}`);
             console.log(`Confidence: ${pc.confidence}`);
             console.log("-----------------");
             newHistoryChoices.push({
                 functionName: pc["function"],
-                functionCodeLine: pc.codeLine,
+                functionCodeLine: fileCodeLine,
                 originalFilePath: currentPath,
             } as ProcessChoice);
         })
         const rl = readline.createInterface({input, output});
         const result = await rl.question(`Please Input Index which you want to see details
-※：enter 5 to retry. enter 6 to show history. enter 7 to get report.
+※：enter 5 to retry. enter 6 to show history. enter 7 to get report. enter 8 to show current file.
 ※：If you enter string, it is recognized as hash value to search history.
 `);
         let resultNumber = Number(result);
@@ -135,12 +155,29 @@ ${functionContent}
                 return
             }
         }
+        if (resultNumber === 8) {
+            console.log("\n\n" + functionContent + "\n\n");
+            const rl2 = readline.createInterface({input, output})
+            const result2 = await rl2.question(`Please Input Index which you want to see details
+※：enter 5 to retry.
+`);
+            rl2.close();
+            resultNumber = Number(result2);
+            if (isNaN(resultNumber)){
+                this.runHistoryPoint(result2)
+                return;
+            }
+            if (resultNumber === 5) {
+                this.runTask(currentPath, functionContent)
+                return
+            }
+        }
         if (!parsedContent[resultNumber]) return;
         this.historyHandler.addHistory(newHistoryChoices);
         const goplsHanlder = new GoplsHandler(currentPath, "/opt/homebrew/bin/gopls");
         await goplsHanlder.readFile();
         const file = await goplsHanlder.searchNextFunction(
-            parsedContent[resultNumber].codeLine,
+            parsedContentCodeLineArray[resultNumber],
             parsedContent[resultNumber]["function"]
         )
         if (!file) {
