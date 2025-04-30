@@ -1,6 +1,7 @@
 import { execa } from "execa";
 import fs from "fs/promises"
 import path from "path";
+import { getLastIndex } from "../util/string";
 
 export async function getFunctionContentFromFile(filePath: string, startRow: number) {
     let originalFileContent;
@@ -60,7 +61,7 @@ export class GoplsHandler {
                 wholeCodeLine = fc
                 return true
             }
-            const bracketRemovedCodeLine = codeLine.split("(")[0]
+            const bracketRemovedCodeLine = codeLine // もし調整が必要そうなら復活させて調整する .split("(")[0] HINT : commaで分岐する
             const isBracketRemovedCodeLineRight = fc.includes(bracketRemovedCodeLine)
             if (isBracketRemovedCodeLineRight) {
                 wholeCodeLine = fc
@@ -72,10 +73,16 @@ export class GoplsHandler {
             console.warn(`codeLine not found @${this.filePath}`)
             return null;
         }
-        let functionIndex = wholeCodeLine.indexOf(functionName);
+        let functionIndex = getLastIndex(wholeCodeLine, functionName);
+        if (functionName.includes(".")) {
+            const functionNameArray = functionName.split(".");
+            const lastFunctionName = functionNameArray[functionNameArray.length - 1];
+            const lastFunctionNameIndex = getLastIndex(lastFunctionName, lastFunctionName);
+            functionIndex += lastFunctionNameIndex + 1
+        }
         if (functionIndex === -1) {
             console.warn(`functionName not fount @${codeLine}`);
-            const functionIndex2 = codeLine.indexOf(functionName);
+            const functionIndex2 = getLastIndex(codeLine, functionName);
             if (functionIndex2 === -1) return null;
             functionIndex = functionIndex2;
         }
@@ -95,7 +102,8 @@ export class GoplsHandler {
         console.log(stdout)
         if (!stdout) return null;
         const stdoutFilePath = stdout.split(": defined here")[0];
-        const parsedFile = await this.parseStdoutFilePath(stdoutFilePath, codeLineIndex);
+        const stdoutFuncDefinition = stdout.split("\n\n").at(-1) ?? ""
+        const parsedFile = await this.parseStdoutFilePath(stdoutFilePath, codeLineIndex, stdoutFuncDefinition, false);
         if (parsedFile) {
             const [filePath, fileContent] = parsedFile
             return [filePath, fileContent];
@@ -109,21 +117,37 @@ export class GoplsHandler {
         }
         console.log(stdout2);
         if (!stdout) return null;
-        const parsedFile2 = await this.parseStdoutFilePath(stdout2.split("\n")[0], codeLineIndex);
+        const stdoutOutputs = stdout2.split("\n")
+        let stdoutIndex = 0;
+        let parsedFile2: [string, string] | null = null;
+        while(stdoutOutputs[stdoutIndex]) {
+            parsedFile2 = await this.parseStdoutFilePath(stdoutOutputs[stdoutIndex], codeLineIndex, "", false);
+            if (parsedFile2) break;
+            stdoutIndex++;
+        }
         if (parsedFile2) {
             const [filePath2, fileContent2] = parsedFile2;
             return [filePath2, fileContent2];
         }
+        const parsedFile3 = await this.parseStdoutFilePath(stdoutFilePath, codeLineIndex, stdoutFuncDefinition, true);
+        if (parsedFile3) {
+            const [filePath, fileContent] = parsedFile3
+            return [filePath, fileContent];
+        }
         return null;
     }
-    private async parseStdoutFilePath(filePath: string, codeLineIndex: number): Promise<[string, string] | null> {
+    private async parseStdoutFilePath(filePath: string, codeLineIndex: number, funcLine: string, isSameAllowed: boolean): Promise<[string, string] | null> {
         const splitFilePath = filePath.split("/");
         const fileInfo = splitFilePath[splitFilePath.length - 1];
         const fileName = fileInfo.split(":")[0];
         const resultFilePath = [...splitFilePath.slice(0, splitFilePath.length - 1), fileName].join("/");
         const fileRow = Number(fileInfo.split(":")[1]);
-        if (fileRow === codeLineIndex) return null
-        const fileContent = await getFunctionContentFromFile(resultFilePath, fileRow);
-        return [resultFilePath, fileContent ?? ""];
+        if (fileRow === codeLineIndex && !isSameAllowed) return null
+        const fileContent = await getFunctionContentFromFile(resultFilePath, fileRow) ?? "";
+        const funcDefinition = funcLine.split("\n").filter((fl) => {
+            return fl.startsWith("func")
+        }).join("\n");
+        const finalFileContent = fileContent + "\n\n" + funcDefinition
+        return [resultFilePath, finalFileContent];
     }
 }

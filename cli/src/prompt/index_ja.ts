@@ -99,9 +99,10 @@ func main() {
   }
 ]
 
-- If the code spans multiple lines, extract only the first line for content of "codeLine".
+- If the code spans multiple lines, extract only the first line for content of "codeLine", but you must take special care for "interface embedding" to be specified.
 - Please do not include any comments other than JSON.
 - Please exclude the function being searched from the candidates.
+- If return value is struct, you must add it as a candidate.
 - If there are few candidates, please add methods as much as possible.
 
 [example]
@@ -110,7 +111,61 @@ func (m *MetricsServer) GetHandler() http.Handler {
 	return m.handler
 }
 \`\`\`
-Please add "handler" as candidate.(just show method name)
+Please add "m.handler" as candidate.(Don't forget to add "m")
+
+- Try not to select val as candidate
+
+[example1]
+\`\`\`code
+klet.runtimeService = kubeDeps.RemoteRuntimeService
+\`\`\`
+-> not good : "klet.runtimeService" or "runtimeService"
+-> good : "kubeDeps.RemoteRuntimeService" or "RemoteRuntimeService"
+
+[example2]
+\`\`\`code if struct
+type Dependencies struct {
+	RemoteRuntimeService      internalapi.RuntimeService
+}
+\`\`\`
+-> not good : "RemoteRuntimeService"
+-> good : "internalapi.RuntimeService" or "RuntimeService"
+
+[example3]
+\`\`\`code if interface
+type ImageManagerService interface {
+	ListImages(ctx context.Context, filter *runtimeapi.ImageFilter) ([]*runtimeapi.Image, error)
+}
+\`\`\`
+-> not good : "runtimeapi.Image"
+-> good : "ListImages"
+
+- Don't forget to add "interface embedding" candidate.
+
+[example]
+\`\`\`code of interface
+type RuntimeService interface {
+	RuntimeVersioner
+	UpdateRuntimeConfig(ctx context.Context, runtimeConfig *runtimeapi.RuntimeConfig) error
+}
+\`\`\`
+-> not good : "UpdateRuntimeConfig" ("RuntimeVersioner" is not included, not enough)
+-> good : "UpdateRuntimeConfig", "RuntimeVersioner"
+
+- Do not return any "codeLine" that is not present in the original file content.
+
+[example]
+\`\`\`code that required to return "codeLine"
+func newScrapePool(app storage.Appendable, metrics *scrapeMetrics) (*scrapePool){
+  return sp := &scrapePool{
+    appendable:           app,
+	metrics:              metrics,
+  }
+}
+\`\`\`
+
+-> not good "codeLine" : "type scrapePool struct {" (it is definition, and not included code.)
+-> good "codeLine" : "sp := &scrapePool{" (it is included in code.)
 
 - Please respond "explain" by 日本語, but don't translate "function" or "codeLine".
 - Respond only in valid JSON format

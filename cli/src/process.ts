@@ -79,11 +79,13 @@ ${functionContent}
         let parsedContentCodeLineArray: string[] = [];
         parsedContent.forEach((pc, index) => {
             const fileCodeLine = fileContentArray.find((fcr) => {
-                if (fcr.includes(pc.codeLine.split(")")[0])) return true
-            })
-            ?? fileContentArray.find((fcr) => {
+                // fcr.includes(pc.codeLine.split(")")[0]) にすべきかもしれないが、
+                // definition の func 定義の場合、うまくいかない
+                if (fcr.includes(pc.codeLine)) return true
+            }) ?? fileContentArray.find((fcr) => {
                 const spaceRemovedRow = fcr.replace(/ /g, "").replace(/\t/g, "");
                 if (spaceRemovedRow.startsWith("//") || spaceRemovedRow.startsWith("/*")) return false
+                // string check
                 const isFunctionString = new RegExp(`"[\\s\\S]*${pc["function"]}[\\s\\S]*"`, "g").exec(fcr)
                 if (isFunctionString) return false
                 const isFunctionString2 = new RegExp(`'[\\s\\S]*${pc["function"]}[\\s\\S]*'`, "g").exec(fcr)
@@ -93,11 +95,18 @@ ${functionContent}
                 const isFunctionNameInclude = new RegExp(`[ .\t]{1}${pc["function"]}[ (.:,]{1}`).exec(fcr);
                 return Boolean(isFunctionNameInclude);
                 // return fcr.includes(` ${pc["function"]}`) || fcr.includes(`.${pc["function"]}`);
-            }) ?? pc.codeLine;
+            }) ?? (pc.codeLine.includes(pc["function"])
+            ? pc.codeLine
+            : fileContentArray.find((fcr) => {
+                const spaceRemovedRow = fcr.replace(/ /g, "").replace(/\t/g, "");
+                if (spaceRemovedRow.startsWith("//") || spaceRemovedRow.startsWith("/*")) return false;
+                return fcr.includes(pc["function"])
+            }) ?? pc["function"]);
             parsedContentCodeLineArray.push(fileCodeLine)
             console.log(`${index} : ${pc["function"]}`);
             console.log(`Details : ${pc.explain}`);
             console.log(`Whole CodeLine : ${fileCodeLine}`);
+            console.log(`Original Code : `, pc.codeLine)
             console.log(`Confidence: ${pc.confidence}`);
             console.log("-----------------");
             newHistoryChoices.push({
