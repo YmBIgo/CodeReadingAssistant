@@ -120,10 +120,11 @@ export class HistoryHandler {
         })
         return res
     }
-    showHistory() {
+    showHistory(): string {
         this.visualizeResult =`rootPath: ${this.rootPath}\n\n`
         this.printTree(this.choiceTree)
         console.log(this.visualizeResult);
+        return this.visualizeResult;
     }
     private printTree(tree: ChoiceTree, prefix: string = "") {
         this.visualizeResult += `${prefix}|${tree.content.functionName}

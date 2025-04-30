@@ -6,28 +6,55 @@ import fs from "fs/promises"
 import { GoplsHandler, getFunctionContentFromFile } from "./lsp";
 import Anthropic from "@anthropic-ai/sdk";
 import { prompt, getReportPrompt } from "./prompt/index_ja";
-import { stdin as input, stdout as output } from "node:process";
-import * as readline from "node:readline/promises";
+import { Message, MessageType } from "./type/Message";
+import { AskResponse } from "./type/Response";
 
 const saveDataFolder = "/Users/coffeecup/Desktop/sandbox/readCodeAssistant"
 
 export class ReadCodeAssistant {
     private apiHandler: AnthropicHandler;
-    private historyHandler: HistoryHandler;
-    private rootPath: string;
-    private rootFunctionName: string;
-    private purpose: string;
+    private historyHandler: HistoryHandler | null = null;
+    private rootPath: string = "";
+    private rootFunctionName: string = "";
+    private purpose: string = "";
+    private goplsPath: string = "";
 
-    constructor(rootPath: string, rootFunctionName: string, purpose: string) {
+    private saySocket: (content: string) => void;
+    private askSocket: (content: string) => Promise<AskResponse>;
+
+    messages: Message[];
+    askResponse?: string;
+
+    constructor(
+        ask: (content: string) => Promise<AskResponse>,
+        say: (content: string) => Promise<void>,
+        sendState: (messages: Message[]) => Promise<void>,
+        goplsPath: string
+    ) {
+        this.apiHandler = new AnthropicHandler();
+        this.messages = [];
+        this.saySocket = (content: string) => {
+            const m = this.addMessages(content, "say");
+            sendState(m);
+            say(content);
+        }
+        this.askSocket = async (content: string): Promise<AskResponse> => {
+            const m = this.addMessages(content, "ask");
+            sendState(m);
+            return await ask(content);
+        }
+        this.goplsPath = goplsPath;
+    }
+
+    initializeAndRun(rootPath: string, rootFunctionName: string, purpose: string) {
         this.rootPath = rootPath;
         this.rootFunctionName = rootFunctionName;
         this.purpose = purpose;
-        this.apiHandler = new AnthropicHandler();
-        this.historyHandler = new HistoryHandler(this.rootPath, this.rootFunctionName, this.rootFunctionName);
-        console.log(`\nStarting Task...
+        this.addMessages(`\nStarting Task...
 EntryFile @${rootPath}
 EntryFunction @${rootFunctionName}
--------`)
+-------`, "system");
+        this.historyHandler = new HistoryHandler(this.rootPath, this.rootFunctionName, this.rootFunctionName);
         this.run();
     }
 
@@ -60,6 +87,7 @@ ${this.purpose}
 ${functionContent}
 \`\`\`;
 `
+        this.saySocket("Creating API Request...")
         const history: Anthropic.MessageParam[] = [{role: "user", content: userPrompt}];
         const response = await this.apiHandler.createMessage(prompt, history)
         const type = response.content[0].type;
@@ -77,6 +105,7 @@ ${functionContent}
         const fileContentArray = functionContent.split("\n");
         let newHistoryChoices: ProcessChoice[] = [];
         let parsedContentCodeLineArray: string[] = [];
+        let askQuestion = "";
         parsedContent.forEach((pc, index) => {
             const fileCodeLine = fileContentArray.find((fcr) => {
                 // fcr.includes(pc.codeLine.split(")")[0]) にすべきかもしれないが、
@@ -103,12 +132,12 @@ ${functionContent}
                 return fcr.includes(pc["function"])
             }) ?? pc["function"]);
             parsedContentCodeLineArray.push(fileCodeLine)
-            console.log(`${index} : ${pc["function"]}`);
-            console.log(`Details : ${pc.explain}`);
-            console.log(`Whole CodeLine : ${fileCodeLine}`);
-            console.log(`Original Code : `, pc.codeLine)
-            console.log(`Confidence: ${pc.confidence}`);
-            console.log("-----------------");
+            askQuestion += `\n\n${index} : ${pc["function"]}\n`;
+            askQuestion += `Details : ${pc.explain}\n`;
+            askQuestion += `Whole CodeLine : ${fileCodeLine}\n`;
+            askQuestion += `Original Code : ${pc.codeLine}\n`;
+            askQuestion += `Confidence: ${pc.confidence}\n`;
+            askQuestion += "-----------------\n";
             newHistoryChoices.push({
                 functionName: pc["function"],
                 functionCodeLine: fileCodeLine,
@@ -117,15 +146,13 @@ ${functionContent}
         })
         let resultNumber = 0;
         while(true) {
-            const rl = readline.createInterface({input, output});
-            const result = await rl.question(`Please Input Index which you want to see details
+            const result = await this.askSocket(`Please Input Index which you want to see details
 ※：enter 5 to retry. enter 6 to show history. enter 7 to get report. enter 8 to show current file.
 ※：If you enter string, it is recognized as hash value to search history.
 `);
-            resultNumber = Number(result);
-            rl.close();
+            resultNumber = Number(result.ask);
             if (isNaN(resultNumber)) {
-                this.runHistoryPoint(result);
+                this.runHistoryPoint(result.ask);
                 return;
             }
             if (resultNumber >= 0 && resultNumber < 5) {
@@ -136,7 +163,8 @@ ${functionContent}
                 return
             }
             if (resultNumber === 6) {
-                this.historyHandler.showHistory();
+                const historyTree = this.historyHandler?.showHistory();
+                if (historyTree) this.saySocket(historyTree);
                 continue;
             }
             if (resultNumber === 7) {
@@ -144,13 +172,13 @@ ${functionContent}
                 continue;
             }
             if (resultNumber === 8) {
-                console.log("\n\n" + functionContent + "\n\n");
+                this.saySocket("\n\n----------" + functionContent + "----------\n\n");
                 continue;
             }
         }
         if (!parsedContent[resultNumber]) return;
-        this.historyHandler.addHistory(newHistoryChoices);
-        const goplsHanlder = new GoplsHandler(currentPath, "/opt/homebrew/bin/gopls");
+        this.historyHandler?.addHistory(newHistoryChoices);
+        const goplsHanlder = new GoplsHandler(currentPath, this.goplsPath);
         await goplsHanlder.readFile();
         const file = await goplsHanlder.searchNextFunction(
             parsedContentCodeLineArray[resultNumber],
@@ -161,19 +189,21 @@ ${functionContent}
             return
         }
         const [newFilePath, newFileContent] = file
-        this.historyHandler.choose(resultNumber, newFileContent)
-        console.log(`\nSearching for @${newFilePath}\n`)
+        this.historyHandler?.choose(resultNumber, newFileContent)
+        this.saySocket(`\nSearching for @${newFilePath}\n`)
         this.runTask(newFilePath, newFileContent)
     }
     private runHistoryPoint(historyHash: string) {
-        const newRunConfig = this.historyHandler.moveById(historyHash);
+        const newRunConfig = this.historyHandler?.moveById(historyHash);
         if (!newRunConfig) return;
         const { functionCodeLine, originalFilePath } = newRunConfig;
         this.runInitialTask(originalFilePath, functionCodeLine);
     }
     private async getReport() {
-        const [result, functionResult] = this.historyHandler.traceFunctionContent()
-        console.log(`Generate Report related to "${functionResult}"`);
+        const r = this.historyHandler?.traceFunctionContent()
+        if (!r) return;
+        const [result, functionResult] = r;
+        this.saySocket(`Generate Report related to "${functionResult}"`);
         const userPrompt = `\`\`\`purpose
 ${this.purpose}
 \`\`\`
@@ -186,6 +216,23 @@ ${result}`;
         const res = response.content[0].text + "\n\n - Details \n\n" + result;
         const fileName = `report_${Date.now()}.txt`;
         await fs.writeFile(`${saveDataFolder}/${fileName}`, res);
-        console.log(`Generate Report successfully @${saveDataFolder}/${fileName}`);
+        this.saySocket(`Generate Report successfully @${saveDataFolder}/${fileName}`);
+    }
+
+    handleWebViewAskResponse(askResponse: string) {
+        this.askResponse = askResponse;
+    }
+    clearWebViewAskResponse() {
+        this.askResponse = undefined;
+    }
+    getMessages() {
+        return this.messages;
+    }
+    addMessages(content: string, type: MessageType) {
+        this.messages.push({ type, content, time: Date.now() });
+        return this.messages;
+    }
+    setMessages(messages: Message[]) {
+        this.messages = messages;
     }
 }
