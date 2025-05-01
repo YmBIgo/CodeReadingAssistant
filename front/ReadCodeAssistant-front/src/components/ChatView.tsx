@@ -158,7 +158,7 @@ purpose: ${purpose}`
     <Box
       sx={{
         width: "450px",
-        height: "calc(100vh - 150px)",
+        height: "calc(100vh - 220px)",
         backgroundColor: "gray",
         overflow: "scroll",
         position: "relative",
@@ -172,10 +172,11 @@ purpose: ${purpose}`
           padding: "10px",
           borderRadius: "10px",
           width: "410px",
-          margin: "10px 0",
+          margin: "10px 10px",
           position: "fixed",
           top: "0px",
           left: "0px",
+          whiteSpace: "break-spaces"
         }}
       >
         <p>{task}</p>
@@ -189,6 +190,16 @@ purpose: ${purpose}`
           height: "calc(100vh - 450px)",
         }}
       >
+        <Box
+            sx={{
+            backgroundColor: "gray",
+            padding: "10px",
+            margin: "10px 0",
+            height: "50px",
+            width: "410px",
+          }}
+        >
+        </Box>
         {messages.map((message) =>
           message.type === "ask" || message.type === "say" ? (
             <Box
@@ -220,6 +231,16 @@ purpose: ${purpose}`
             </Box>
           )
         )}
+        <Box
+            sx={{
+            backgroundColor: "gray",
+            padding: "10px",
+            margin: "10px 0",
+            height: "100px",
+            width: "410px",
+          }}
+        >
+        </Box>
       </Box>
       <Box
         sx={{
@@ -233,7 +254,7 @@ purpose: ${purpose}`
           onChange={(e) => setInputText(e.target.value)}
           onKeyDown={handleOnKeyDown}
           style={{
-            width: "390px",
+            width: "410px",
           }}
           minRows={3}
         />

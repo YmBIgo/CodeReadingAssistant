@@ -87,7 +87,7 @@ prometheusでscrapeがdiscoverを使っている箇所
 
 // /Users/coffeecup/Documents/open_source/kubernetes/kubernetes/staging/src/k8s.io/kubectl/pkg/cmd/apply/apply.go
 async function readRootPath() {
-    return "/Users/coffeecup/Documents/open_source/kubernetes/kubernetes/pkg/kubelet/kubelet.go"
+    // return "/Users/coffeecup/Documents/open_source/kubernetes/kubernetes/pkg/kubelet/kubelet.go"
     const rl = readline.createInterface({input, output})
     const result = await rl.question("Please input Root Path which you want to see details\n");
     rl.close();
@@ -96,7 +96,7 @@ async function readRootPath() {
 
 // func (o *ApplyOptions) Run() error {
 async function readRootFunction() {
-    return "NewMainKubelet"
+    // return "NewMainKubelet"
     const rl = readline.createInterface({input, output})
     const result = await rl.question("Please input Root Function Line which you want to see details\n");
     rl.close();
@@ -105,7 +105,7 @@ async function readRootFunction() {
 
 // Want to know how "kubectl apply" work.
 async function readPurpose() {
-    return "Kubelet が criを操作している関数を知りたい"
+    // return "Kubelet が criを操作している関数を知りたい"
     const rl = readline.createInterface({input, output})
     const result = await rl.question("Please input Purpose which you want to see details\n");
     rl.close();

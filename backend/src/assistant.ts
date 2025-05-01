@@ -198,7 +198,7 @@ ${functionContent}
         }
         const [newFilePath, newFileContent] = file
         this.historyHandler?.choose(resultNumber, newFileContent)
-        this.saySocket(`\nSearching for @${newFilePath}\n`)
+        this.saySocket(`Searching for @${newFilePath}\n`)
         this.runTask(newFilePath, newFileContent)
     }
     private runHistoryPoint(historyHash: string) {
