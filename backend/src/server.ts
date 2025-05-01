@@ -6,39 +6,46 @@ import * as readline from "node:readline/promises";
 import { Message } from "./type/Message";
 import { ReadCodeAssistant } from "./assistant";
 import { AskResponse } from "./type/Response";
+// import { raceWaitFor } from "./util/raceWaitFor";
+
+let codeReadingAssistant: ReadCodeAssistant;
 
 function createServer(goplsPath: string) {
     const server = new WebSocketServer({ port: 8081 });
     server.on("connection", (socket) => {
-        const codeReadingAssistant = new ReadCodeAssistant(ask, say, sendState, goplsPath);
         async function say(content: string): Promise<void> {
             const sayContentJson = JSON.stringify({
                 type: "say",
-                content
+                say: content
             });
             socket.send(sayContentJson);
         }
         async function ask(content: string): Promise<AskResponse> {
+            codeReadingAssistant.clearWebViewAskResponse();
             const askContentJson = JSON.stringify({
                 type: "ask",
-                content
+                ask: content
             });
             socket.send(askContentJson);
-            await pWaitFor(() => !!codeReadingAssistant.askResponse, {interval: 500});
-            const response: AskResponse = { ask: codeReadingAssistant?.askResponse ?? "unknown error" }
-            codeReadingAssistant.clearWebViewAskResponse();
+            await pWaitFor(() => {
+                return !!codeReadingAssistant.getWebViewAskResponse()
+            }, {interval: 500});
+            const response: AskResponse = { ask: codeReadingAssistant?.getWebViewAskResponse() ?? "unknown error" }
+            console.log("response : ", response)
             return response;
         }
-        async function sendState(messages: Message[]): Promise<void> {
+        function sendState(messages: Message[]): void {
             const stateContentJson = JSON.stringify({
                 type: "state",
-                messages
+                state: messages
             });
             socket.send(stateContentJson);
         }
+        codeReadingAssistant = new ReadCodeAssistant(ask, say, sendState, goplsPath);
         socket.on('message', (message) => {
             try {
                 const messageJson = JSON.parse(message.toString());
+                console.log(messageJson)
                 switch (messageJson.type) {
                     case "Init":
                         const rootPath = messageJson.rootPath ?? "";
@@ -48,7 +55,11 @@ function createServer(goplsPath: string) {
                         break;
                     case "Ask":
                         const askResponse = messageJson.askResponse;
+                        console.log("receive message", askResponse)
                         codeReadingAssistant.handleWebViewAskResponse(askResponse);
+                        break;
+                    case "Reset":
+                        codeReadingAssistant = new ReadCodeAssistant(ask, say, sendState, goplsPath);
                         break;
                     default:
                         break;
@@ -61,10 +72,14 @@ function createServer(goplsPath: string) {
     })
 }
 
-async function main() {
+async function readGopls() {
     const rl = readline.createInterface({input, output})
-    const goplsResult = await rl.question("Please Input Gopls Path");
-    createServer(goplsResult);
+    const goplsResult = await rl.question("Please Input Gopls Path\n");
+    rl.close();
+    return goplsResult
 }
 
-main();
+(async() => {
+    const goplsResult = await readGopls();
+    createServer(goplsResult);
+})()

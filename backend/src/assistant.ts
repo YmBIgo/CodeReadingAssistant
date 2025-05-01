@@ -8,6 +8,7 @@ import Anthropic from "@anthropic-ai/sdk";
 import { prompt, getReportPrompt } from "./prompt/index_ja";
 import { Message, MessageType } from "./type/Message";
 import { AskResponse } from "./type/Response";
+import pWaitFor from "p-wait-for";
 
 const saveDataFolder = "/Users/coffeecup/Desktop/sandbox/readCodeAssistant"
 
@@ -21,14 +22,15 @@ export class ReadCodeAssistant {
 
     private saySocket: (content: string) => void;
     private askSocket: (content: string) => Promise<AskResponse>;
+    private sendState: (messages: Message[]) => void;
 
     messages: Message[];
-    askResponse?: string;
+    private askResponse?: string;
 
     constructor(
         ask: (content: string) => Promise<AskResponse>,
-        say: (content: string) => Promise<void>,
-        sendState: (messages: Message[]) => Promise<void>,
+        say: (content: string) => void,
+        sendState: (messages: Message[]) => void,
         goplsPath: string
     ) {
         this.apiHandler = new AnthropicHandler();
@@ -38,22 +40,24 @@ export class ReadCodeAssistant {
             sendState(m);
             say(content);
         }
-        this.askSocket = async (content: string): Promise<AskResponse> => {
+        this.askSocket = (content: string) => {
             const m = this.addMessages(content, "ask");
             sendState(m);
-            return await ask(content);
+            return ask(content);
         }
+        this.sendState = sendState;
         this.goplsPath = goplsPath;
+        this.askResponse = undefined;
     }
 
     initializeAndRun(rootPath: string, rootFunctionName: string, purpose: string) {
         this.rootPath = rootPath;
         this.rootFunctionName = rootFunctionName;
         this.purpose = purpose;
-        this.addMessages(`\nStarting Task...
+        this.saySocket(`Starting Task...
 EntryFile @${rootPath}
 EntryFunction @${rootFunctionName}
--------`, "system");
+-------`);
         this.historyHandler = new HistoryHandler(this.rootPath, this.rootFunctionName, this.rootFunctionName);
         this.run();
     }
@@ -132,7 +136,7 @@ ${functionContent}
                 return fcr.includes(pc["function"])
             }) ?? pc["function"]);
             parsedContentCodeLineArray.push(fileCodeLine)
-            askQuestion += `\n\n${index} : ${pc["function"]}\n`;
+            askQuestion += `${index} : ${pc["function"]}\n`;
             askQuestion += `Details : ${pc.explain}\n`;
             askQuestion += `Whole CodeLine : ${fileCodeLine}\n`;
             askQuestion += `Original Code : ${pc.codeLine}\n`;
@@ -145,12 +149,15 @@ ${functionContent}
             } as ProcessChoice);
         })
         let resultNumber = 0;
-        while(true) {
-            const result = await this.askSocket(`Please Input Index which you want to see details
+        for(;;) {
+            const result = await this.askSocket(`${askQuestion} Please Input Index which you want to see details
 ※：enter 5 to retry. enter 6 to show history. enter 7 to get report. enter 8 to show current file.
 ※：If you enter string, it is recognized as hash value to search history.
 `);
+            console.log("result : ", result)
             resultNumber = Number(result.ask);
+            const newMessages = this.addMessages(`User Enter ${result.ask}`, "user")
+            this.sendState(newMessages)
             if (isNaN(resultNumber)) {
                 this.runHistoryPoint(result.ask);
                 return;
@@ -221,6 +228,9 @@ ${result}`;
 
     handleWebViewAskResponse(askResponse: string) {
         this.askResponse = askResponse;
+    }
+    getWebViewAskResponse(): string | undefined {
+        return this.askResponse;
     }
     clearWebViewAskResponse() {
         this.askResponse = undefined;
