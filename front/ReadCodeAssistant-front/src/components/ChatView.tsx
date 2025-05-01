@@ -151,7 +151,7 @@ purpose: ${purpose}`
     if (lastMessage.type === "ask") {
       setPrimaryButtonText("Response");
       const messagesContainer = document.getElementById("messages");
-      messagesContainer?.scroll(0, messagesContainer.scrollHeight)
+      messagesContainer?.lastElementChild?.scrollIntoView({block: "end", behavior: "smooth"})
     }
   }, [lastMessage]);
   return (
@@ -197,8 +197,9 @@ purpose: ${purpose}`
                 justifyContent: "flex-start",
                 backgroundColor: "white",
                 padding: "10px",
+                margin: "10px 0",
                 whiteSpace: "break-spaces",
-                flexBasis: "370px",
+                width: "410px",
               }}
             >
               {message.content}
@@ -210,8 +211,9 @@ purpose: ${purpose}`
                 justifyContent: "flex-end",
                 backgroundColor: "white",
                 padding: "10px",
+                margin: "10px 0",
                 whiteSpace: "break-spaces",
-                flexBasis: "370px",
+                width: "410px",
               }}
             >
               {message.content}

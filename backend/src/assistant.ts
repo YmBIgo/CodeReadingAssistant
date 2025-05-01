@@ -149,8 +149,9 @@ ${functionContent}
             } as ProcessChoice);
         })
         let resultNumber = 0;
+        this.saySocket(`${askQuestion}`)
         for(;;) {
-            const result = await this.askSocket(`${askQuestion} Please Input Index which you want to see details
+            const result = await this.askSocket(`Please Input Index which you want to see details
 ※：enter 5 to retry. enter 6 to show history. enter 7 to get report. enter 8 to show current file.
 ※：If you enter string, it is recognized as hash value to search history.
 `);
